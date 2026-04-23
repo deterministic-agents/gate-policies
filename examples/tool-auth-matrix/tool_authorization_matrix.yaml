@@ -1,0 +1,187 @@
+# GATE Tool Authorization Matrix
+# Version: 1.0
+# Last updated: 2026-04-13
+#
+# This matrix defines which agents may invoke which tools,
+# under which conditions, and with which required controls.
+#
+# Governance: Any change to this matrix requires:
+#   1. Update to the affected agent's ABOM (with new toolset_hash)
+#   2. Policy bundle update (new policy_bundle_hash)
+#   3. Conformance check run (Check01, Check02)
+#   4. Change record in your ITSM system
+#
+# Columns:
+#   tool            — Tool name (must match tool schema filename)
+#   side_effecting  — true if tool causes external state change
+#   allowed_agents  — SPIFFE subject IDs permitted to invoke
+#   required_controls — GATE controls required for this tool
+#   required_conditions — Policy conditions that must hold
+#   default_posture — deny (default) or allow_read_only
+#   notes           — Governance notes
+
+tools:
+
+  # ── READ-ONLY ──────────────────────────────────────────────────────────────
+
+  - tool: read_erp_po
+    side_effecting: false
+    category: read_only
+    allowed_agents:
+      - spiffe://org/agent/invoice-reconciliation
+      - spiffe://org/agent/finance-analyst
+    required_controls: [C01, C05, C11, C13]
+    required_conditions:
+      - identity.attested == true
+      - role in ["finance", "finance-readonly"]
+    default_posture: deny
+
+  - tool: read_crm_contact
+    side_effecting: false
+    category: read_only
+    allowed_agents:
+      - spiffe://org/agent/customer-support
+    required_controls: [C01, C05, C09, C11, C13]
+    required_conditions:
+      - identity.attested == true
+      - purpose in ["support_ticket", "identity_verification"]
+    notes: >
+      ACL enforced at memory gateway level (C09). Agent may only retrieve
+      contacts associated with the active support ticket.
+    default_posture: deny
+
+  # ── REVERSIBLE WRITE ───────────────────────────────────────────────────────
+
+  - tool: create_dispute_case
+    side_effecting: true
+    category: reversible_write
+    allowed_agents:
+      - spiffe://org/agent/invoice-reconciliation
+    required_controls: [C01, C05, C06, C09, C10, C11, C12, C13]
+    required_conditions:
+      - identity.attested == true
+      - idempotency_key present
+      - orm_risk_score < 0.65
+    obligations_required:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - require_idempotency_key
+    default_posture: deny
+
+  - tool: create_ticket
+    side_effecting: true
+    category: reversible_write
+    allowed_agents:
+      - spiffe://org/agent/customer-support
+    required_controls: [C01, C05, C06, C09, C10, C11, C13]
+    required_conditions:
+      - identity.attested == true
+      - orm_risk_score < 0.65
+    obligations_required:
+      - audit_log
+      - require_idempotency_key
+    default_posture: deny
+
+  # ── IRREVERSIBLE WRITE ─────────────────────────────────────────────────────
+
+  - tool: send_external_email
+    side_effecting: true
+    category: irreversible_write
+    allowed_agents:
+      - spiffe://org/agent/communications
+    required_controls: [C01, C05, C06, C09, C10, C11, C12, C13]
+    required_conditions:
+      - identity.attested == true
+      - destination_domain in allowlisted_domains
+      - orm_risk_score < 0.45
+      - hitl_approval_id present  # Always requires HITL
+    obligations_required:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - hitl_approval
+      - verify_destination
+      - require_idempotency_key
+    invariant_rules_applied:
+      - INV-DOMAIN-001  # Destination must be in allowlisted domains
+    default_posture: deny
+    notes: >
+      External email is irreversible. Requires HITL approval regardless of ORM score.
+      Domain allowlist enforced by invariant bundle (not policy bundle).
+
+  - tool: rollback_deployment
+    side_effecting: true
+    category: irreversible_write
+    allowed_agents:
+      - spiffe://org/agent/devops-automation
+    required_controls: [C01, C05, C06, C09, C10, C11, C12, C13, C16]
+    required_conditions:
+      - identity.attested == true
+      - orm_risk_score < 0.65
+      - environment == "prod" implies hitl_approval_id present
+    obligations_required:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - require_idempotency_key
+    invariant_rules_applied:
+      - INV-RUNLIMIT-001
+    default_posture: deny
+
+  # ── FINANCIAL ─────────────────────────────────────────────────────────────
+
+  - tool: transfer_funds
+    side_effecting: true
+    category: financial
+    allowed_agents:
+      - spiffe://org/agent/treasury
+    required_controls: [C01, C05, C06, C09, C10, C11, C12, C13]
+    required_conditions:
+      - identity.attested == true
+      - destination_verified == true
+      - amount_usd <= 5000           # Policy limit (C05)
+      - hitl_approval_id present     # HITL required above $1000
+      - idempotency_key present
+      - orm_risk_score < 0.65
+    obligations_required:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - hitl_approval
+      - verify_destination
+      - require_idempotency_key
+    invariant_rules_applied:
+      - INV-FINANCIAL-001   # Hard ceiling $10,000 (invariant, not policy)
+      - INV-FINANCIAL-002   # Destination must be verified vendor
+    default_posture: deny
+    notes: >
+      Policy limit ($5,000) is configurable. Invariant limit ($10,000) requires
+      break-glass override with dual approval. No agent may ever exceed the
+      invariant limit regardless of policy or ORM score.
+
+  # ── EXPLICITLY DENIED (no agent permitted by default) ─────────────────────
+
+  - tool: delete_record
+    side_effecting: true
+    category: irreversible_write
+    allowed_agents: []   # No agent permitted by default
+    required_controls: [C01, C05, C06, C09, C10, C11, C12, C16]
+    required_conditions:
+      - exception_id present        # C09 invariant INV-DELETE-001
+      - environment != "prod"       # Prod requires additional override
+      - hitl_approval_id present
+      - formal_verification_artifact present   # C16 required
+    obligations_required:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - hitl_approval
+      - require_idempotency_key
+    invariant_rules_applied:
+      - INV-DELETE-001
+    default_posture: deny
+    notes: >
+      Exception-only via break-glass. No agent is permitted by default.
+      Granting access requires: ABOM update + policy bundle update +
+      conformance check run + ITSM change record.

@@ -1,0 +1,142 @@
+# GATE Agent Bill of Materials (ABOM)
+# Agent: invoice-reconciliation-agent
+# Version: 2.1.0
+# Owner: finance-platform@example.com
+# GATE version: 1.2.8
+#
+# This ABOM is the authoritative manifest of what this agent is allowed to do.
+# The Tool Gateway verifies bundle hashes against this document on every run.
+# Changes require re-signing and version increment.
+#
+# How to update:
+#   1. Change the relevant fields below.
+#   2. Recompute hashes for any updated bundles.
+#   3. Increment agent version.
+#   4. Re-sign the ABOM with your signing key.
+#   5. Update your deployment pipeline to reference the new ABOM version.
+
+agent:
+  name: invoice-reconciliation-agent
+  version: "2.1.0"
+  owner_team: finance-platform
+  owner_email: finance-platform@example.com
+  purpose: >
+    Reconcile supplier invoices against purchase orders and goods receipt notes
+    in the ERP system. Create dispute cases for mismatches. Does not execute
+    payments or modify financial records directly.
+  autonomy_tier: bounded   # sandbox | bounded | high_privilege
+
+gate:
+  framework_version: "1.2.8"
+  required_controls:
+    - C01_workload_identity_and_attestation
+    - C03_artifact_integrity_and_supply_chain
+    - C05_tool_gateway_policy_as_code
+    - C06_circuit_breakers_and_emergency_stop
+    - C07_resource_governance_and_economic_safety
+    - C08_prompt_and_content_injection_defense
+    - C09_execution_constraints_and_invariant_enforcement
+    - C10_deterministic_replay
+    - C11_verifiable_audit_ledger
+    - C13_agent_native_observability_and_semantic_tracing
+
+runtime:
+  platform: kubernetes
+  namespace: agents-finance
+  image_digest: "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+  prompt_bundle_hash: "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
+  toolset_hash:       "sha256:c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+  policy_bundle_hash: "sha256:d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5"
+  invariant_bundle_hash: "sha256:e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
+
+identity:
+  workload_id: "spiffe://org/agent/invoice-reconciliation"
+  token_ttl: 15m
+  attestation_required: true
+  # Attestation claims the gateway verifies on each request:
+  attestation_claims:
+    - image_digest
+    - config_hash
+    - toolset_hash
+
+model:
+  model_id: provider/model
+  model_version: "2025-11-01"
+  temperature: 0.1       # Low temperature for deterministic reconciliation logic
+  seed_mode: recorded    # Seed is recorded in replay trace for determinism
+  system_prompt_version: "v3.4.1"
+  max_tokens: 4096
+
+budgets:
+  max_tool_calls_per_run: 50
+  max_cost_usd_per_run: 2.00
+  max_tokens_per_run: 80000
+  max_run_duration_seconds: 300
+  max_irrevocable_actions_per_run: 5   # C09 invariant INV-RUNLIMIT-001
+
+memory:
+  partitions:
+    - name: finance
+      acl: "role=finance-platform"
+      ttl: 30d
+      provenance_required: true
+      poisoning_detection: enabled
+
+tools:
+  # Read-only tools — no side effects
+  - name: read_erp_po
+    side_effecting: false
+    tool_schema_ref: "schemas/erp/read_erp_po.v1.json"
+    required_controls: [C05, C11, C13]
+
+  - name: read_erp_invoice
+    side_effecting: false
+    tool_schema_ref: "schemas/erp/read_erp_invoice.v1.json"
+    required_controls: [C05, C11, C13]
+
+  - name: read_erp_grn
+    side_effecting: false
+    tool_schema_ref: "schemas/erp/read_erp_grn.v1.json"
+    required_controls: [C05, C11, C13]
+
+  - name: read_vendor_registry
+    side_effecting: false
+    tool_schema_ref: "schemas/vendor/read_vendor_registry.v1.json"
+    required_controls: [C05, C11, C13]
+
+  # Reversible write tools — side effects but recoverable
+  - name: create_dispute_case
+    side_effecting: true
+    tool_category: reversible_write
+    tool_schema_ref: "schemas/erp/create_dispute_case.v1.json"
+    required_controls: [C05, C06, C09, C10, C11, C12, C13]
+    obligations:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - require_idempotency_key
+
+  - name: update_invoice_status
+    side_effecting: true
+    tool_category: reversible_write
+    tool_schema_ref: "schemas/erp/update_invoice_status.v1.json"
+    required_controls: [C05, C06, C09, C10, C11, C12, C13]
+    obligations:
+      - audit_log
+      - sign_action
+      - snapshot_response
+      - require_idempotency_key
+    allowed_status_transitions:
+      # Only specific status transitions are permitted.
+      # The invariant bundle enforces this at the tool boundary.
+      - from: pending
+        to: [under_review, disputed]
+      - from: under_review
+        to: [approved, disputed]
+
+lifecycle:
+  commissioned_at: "2025-12-01"
+  commissioned_by: finance-platform
+  last_reviewed_at: "2026-04-01"
+  review_due:       "2026-07-01"
+  ephemeral: true   # Instances are provisioned per-run and decommissioned immediately
