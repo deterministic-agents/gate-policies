@@ -96,7 +96,7 @@ deny if {
 
 identity_valid if {
   input.subject.attested == true
-  input.subject.subject_id in AGENT_ALLOWLIST
+  AGENT_ALLOWLIST[input.subject.subject_id]
 }
 
 # ─────────────────────────────────────────────
