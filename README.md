@@ -167,9 +167,18 @@ there or from your own tool schema registry.
 
 ---
 
-## v1.1.0 (2026-06-16)
+## v1.1.1 (2026-06-16)
 
-Adds three new policy bundles for the v1.3 controls. Following the v1.3 contract, new controls get new policy files. Nothing is added to `tool_gateway_baseline.rego` or `invariants_baseline.rego`; those files are unchanged in v1.1.0.
+First gate-policies Release Object since v1.0.0. The v1.1.0 tag
+carried the three v1.3 policy bundles onto main but no Release Object
+was ever cut, so the content was not downloadable as a release
+artifact. v1.1.1 ships that content together with a README cleanup
+that removed two lines of staging instruction text accidentally
+committed in the v1.1.0 merge. Policy and Rego files at v1.1.1 are
+byte-identical to v1.1.0; ABOM `policy_bundle_hash` and
+`invariant_bundle_hash` references do not need to change.
+
+Adds three new policy bundles for the v1.3 controls. Following the v1.3 contract, new controls get new policy files. Nothing is added to `tool_gateway_baseline.rego` or `invariants_baseline.rego`; those files are unchanged in this release.
 
 ### New files
 
