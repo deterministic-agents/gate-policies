@@ -1,6 +1,6 @@
 # gate-policies
 
-**GATE OPA/Rego policy and invariant bundles - v1.1.0**
+**GATE OPA/Rego policy and invariant bundles - v1.1.1**
 
 Baseline policy bundle, invariant bundle, unit tests, ABOM templates,
 tool authorization matrix, and a worked HITL integration example for
@@ -166,10 +166,6 @@ Tool schemas used for schema validation in `C05` should be sourced from
 there or from your own tool schema registry.
 
 ---
-
-# gate-policies v1.1.0 - additions to README
-
-Insertion point: under the existing version history block in the repo README, prepend a v1.1.0 section.
 
 ## v1.1.0 (2026-06-16)
 
