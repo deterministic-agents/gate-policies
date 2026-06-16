@@ -1,6 +1,6 @@
 # gate-policies
 
-**GATE OPA/Rego policy and invariant bundles - v1.0.0**
+**GATE OPA/Rego policy and invariant bundles - v1.1.0**
 
 Baseline policy bundle, invariant bundle, unit tests, ABOM templates,
 tool authorization matrix, and a worked HITL integration example for
@@ -19,6 +19,16 @@ gate-policies/
 ├── tool_gateway_baseline.rego        # Production baseline policy (C05)
 ├── tool_gateway_baseline_test.rego   # OPA unit tests - run before every deploy
 ├── invariants_baseline.rego          # C09 invariant bundle (separate from policy)
+├── policies/
+│   ├── discovery/
+│   │   ├── c17_discovery.rego                  # C17 candidate classification (v1.1.0)
+│   │   └── c17_discovery_test.rego             # C17 unit tests
+│   ├── memory/
+│   │   ├── c18_quality.rego                    # C18 quality gate (v1.1.0)
+│   │   └── c18_quality_test.rego               # C18 unit tests
+│   └── assurance/
+│       ├── c19_drift_response.rego             # C19 drift response routing (v1.1.0)
+│       └── c19_drift_response_test.rego        # C19 unit tests
 └── examples/
     ├── abom/
     │   └── invoice_reconciliation_agent.yaml   # Complete bounded-tier ABOM
@@ -154,6 +164,49 @@ Policy and invariant bundles reference contracts from
 [gate-contracts](https://github.com/deterministic-agents/gate-contracts).
 Tool schemas used for schema validation in `C05` should be sourced from
 there or from your own tool schema registry.
+
+---
+
+# gate-policies v1.1.0 - additions to README
+
+Insertion point: under the existing version history block in the repo README, prepend a v1.1.0 section.
+
+## v1.1.0 (2026-06-16)
+
+Adds three new policy bundles for the v1.3 controls. Following the v1.3 contract, new controls get new policy files. Nothing is added to `tool_gateway_baseline.rego` or `invariants_baseline.rego`; those files are unchanged in v1.1.0.
+
+### New files
+
+```
+policies/discovery/c17_discovery.rego          # gate.discovery
+policies/discovery/c17_discovery_test.rego
+policies/memory/c18_quality.rego               # gate.memory.quality
+policies/memory/c18_quality_test.rego
+policies/assurance/c19_drift_response.rego     # gate.assurance.drift
+policies/assurance/c19_drift_response_test.rego
+```
+
+### Policy bundle versioning
+
+Each new package is independently versioned. The v1.1.0 release ships:
+
+- `gate-policy-c17-v1.0` (discovery classification)
+- `gate-policy-c18-v1.0` (memory quality gate)
+- `gate-policy-c19-v1.0` (drift response routing)
+
+Hash the bundle contents and reference each hash from your ABOM where applicable.
+
+### Why new files, not extensions
+
+The v1.3 framework paper requires that new controls produce isolated policy units rather than accreting onto the existing baseline. This keeps the existing tool-gateway policy bundle stable for v1.0.0 implementations and lets v1.3 features roll out independently. Reviewers can read each policy file end to end without context from other files.
+
+### Running the tests
+
+```bash
+opa test policies/ -v
+```
+
+All v1.0.0 baseline tests continue to pass unchanged. The new files add tests under `gate.discovery_test`, `gate.memory.quality_test`, and `gate.assurance.drift_test`.
 
 ---
 
