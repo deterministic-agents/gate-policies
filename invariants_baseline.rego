@@ -86,7 +86,10 @@ http_destination_allowed if {
     "api.sendgrid.com",
     "hooks.slack.com",
   }
-  url_host := urlparse.host(input.action.params.url)
+  # Extract host from URL without an OPA built-in. Strip scheme, then take
+  # everything before the first path separator. Trims any port suffix.
+  no_scheme := trim_prefix(trim_prefix(input.action.params.url, "https://"), "http://")
+  url_host := split(split(no_scheme, "/")[0], ":")[0]
   url_host in ALLOWED_EXTERNAL_DOMAINS
 }
 
